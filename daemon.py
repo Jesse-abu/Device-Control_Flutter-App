@@ -1,83 +1,25 @@
-import asyncio
-import platform
-import json
-import re
-import os
-import socket
-import openwakeword
+import asyncio, platform, json, re, os, socket, openwakeword, threading
 import numpy as np
 import sounddevice as sd
-import jwt
 import screen_brightness_control as sbc
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Query
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Optional
-from datetime import datetime, timedelta
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from process_observer import ProcessObserver
 from faster_whisper import WhisperModel
 from openwakeword.model import Model
 from zeroconf import ServiceInfo, Zeroconf
-from passlib.context import CryptContext
-from pydantic import BaseModel
+from agent_orchestrator import run_autonomous_agent
 
+app = FastAPI()
+observer = ProcessObserver()
 
-
-SECRET_KEY = "SUPER_SECRET_COMPANION_KEY_CHANGE_IN_PRODUCTION" # Keep secure!
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 Days
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
-
-app = FastAPI(title="AI Device Companion Gateway")
-
-# Mock User Database (In Phase 5, this routes to PostgreSQL/Supabase)
-MOCK_USER_DB = {
-    "admin@companion.ai": {
-        "username": "admin@companion.ai",
-        "hashed_password": pwd_context.hash("securepassword123"),
-        "device_id": "laptop-master-01"
-    }
-}
-
-# --- AUTH HELPER FUNCTIONS ---
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def decode_token(token: str):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except jwt.PyJWTError:
-        return None
-
-# --- REST AUTH ENDPOINTS ---
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
-
-@app.post("/api/v1/auth/login", response_model=TokenResponse)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = MOCK_USER_DB.get(form_data.username)
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["username"], "device_id": user["device_id"]},
-        expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-#------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (Chrome, Mobile, Desktop)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- INITIALIZE LOCAL AI MODELS ---
 print("Loading Faster-Whisper model...")
@@ -109,13 +51,10 @@ def set_system_volume(level):
     level = max(0, (min(100, level)))
 
     if system == "Windows":
-        from ctypes import cast, POINTER
-        from comtypes import CLSCTX_ALL
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        from pycaw.pycaw import AudioUtilities
 
         devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume = devices.EndpointVolume
         volume.SetMasterVolumeLevelScalar(level / 100.0, None)
 
     elif system == "Darwin":
@@ -205,30 +144,63 @@ def listen_for_wakeword_and_transcribe(loop):
 
 # ------
 
-@app.websocket("ws/control")
+'''
+@app.get("/api/v1/traces")
+async def get_recent_traces():
+    """Endpoint for Phase 5 AI Agent to read recorded workflows."""
+    traces = []
+    if os.path.exists("workflow_traces.jsonl"):
+        with open("workflow_traces.jsonl", "r", encoding="utf-8") as f:
+            for line in f.readlines()[-20:]:  # Return last 20 snapshot logs
+                traces.append(json.loads(line))
+    return {"status": "success", "traces": traces}
+
+@app.on_event("startup")
+def start_observer_background():
+    # Run process observer in a separate background thread
+    t = threading.Thread(target=observer.start, kwargs={"poll_interval": 5.0}, daemon=True)
+    t.start()
+
+@app.on_event("shutdown")
+def stop_observer_background():
+    observer.stop()
+'''
+@app.post("/api/v1/agent/execute")
+async def execute_agent_intent(payload):
+    prompt = payload.get("prompt")
+    if not prompt:
+        return { "status":"error", "message":"Missing Prompt" }
+    
+    import threading
+    t = threading.Thread(target=run_autonomous_agent, args=(prompt,), daemon=True)
+    t.start()
+
+    return { "status":"success", "message":f"Agent started Execution for {prompt}" }
+
+
+@app.websocket("/ws/control")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("Client Connected!")
-
+    active_cnct.append(websocket)
+    print("WebSocket Client Connected Successfully!")
+    
     try:
         while True:
-            data = await websocket.receive_json() 
+            data = await websocket.receive_json()
+            print(f"[Received Command]: {data}")
+
             action = data.get("action")
             value = data.get("value")
 
             if action == "set_volume":
                 set_system_volume(int(value))
-                await websocket.send_json({ "status":"success", "msg":f"Volume set to {value}" })
-
+                await websocket.send_json({"status": "success", "action": "set_volume", "value": value})
             elif action == "set_brightness":
                 sbc.set_brightness(int(value))
-                await websocket.send_json({ "status":"success", "msg":f"Brightness set to {value}"})
-
-            else:
-                await websocket.send_json({ "status":"error", "msg":f"Unknown action" })
+                await websocket.send_json({"status": "success", "action": "set_brightness", "value": value})
 
     except WebSocketDisconnect:
-        print("Client Disconnected!")
+        print("Client disconnected")
 
 
 zeroconf = Zeroconf()

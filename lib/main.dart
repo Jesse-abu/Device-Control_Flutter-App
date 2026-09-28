@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nsd/nsd.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
 void main() {
   runApp(const ProviderScope(child: DeviceControlApp()));
 }
@@ -150,6 +151,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: 32),
 
             // Controls
+            ElevatedButton(
+              onPressed: () {
+                _connectToDaemon("192.168.254.248", 8000);
+              }, 
+              child: const Text("Connect via direct IP link")),
             Text("System Volume (${_volume.round()}%)", style: const TextStyle(fontWeight: FontWeight.bold)),
             Slider(
               value: _volume,
@@ -157,7 +163,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               max: 100,
               onChanged: (val) {
                 setState(() => _volume = val);
-                _sendCommand("set_volume", val.round());
+                if ( val.round() % 10 == 0) {
+                  _sendCommand("set_volume", val.round());
+                }
               },
             ),
             const SizedBox(height: 16),
@@ -168,7 +176,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               max: 100,
               onChanged: (val) {
                 setState(() => _brightness = val);
-                _sendCommand("set_brightness", val.round());
+                if ( val.round() % 10 == 0) {
+                  _sendCommand("set_brightness", val.round());
+                }
               },
             ),
           ],
