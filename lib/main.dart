@@ -150,7 +150,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             //controls
             ElevatedButton(
               onPressed: () {
-                _connectToDaemon("100.112.28.37", 8000);
+                _connectToDaemon("127.0.0.1", 8000);
               }, 
               child: const Text("Connect via direct IP link")),
             Text("System Volume (${_volume.round()}%)", style: const TextStyle(fontWeight: FontWeight.bold)),

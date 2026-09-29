@@ -207,7 +207,7 @@ zeroconf = Zeroconf()
 
 @app.on_event("startup")
 def startup_event():
-    local_ip = "100.112.28.37"
+    local_ip = get_local_ip()
     port = 8000
     print(f"Registering mDNS service at: {local_ip}:{port}")
 
