@@ -3,7 +3,7 @@ from langchain_community.vectorstores import LanceDB
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-# Path to LanceDB directory
+#path to LanceDB directory
 DB_PATH = "./lancedb_data"
 
 def initialize_lancedb_index(trace_file="workflow_traces.jsonl"):
@@ -19,7 +19,7 @@ def initialize_lancedb_index(trace_file="workflow_traces.jsonl"):
                 continue
             trace = json.loads(line)
             
-            # Compose readable text representation for vector indexing
+            #compose readable text representation for vector indexing
             text_content = (
                 f"Application: {trace.get('app_name')}\n"
                 f"Window Title: {trace.get('window_title')}\n"
@@ -41,14 +41,14 @@ def initialize_lancedb_index(trace_file="workflow_traces.jsonl"):
         print("No trace documents found to index.")
         return None
 
-    # Load local open-source embedding model
+    #load local open-source embedding model
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     
-    # Initialize LanceDB connection
+    #initialize LanceDB connection
     db = lancedb.connect(DB_PATH)
     table = db.create_table("workflow_traces", data=[{"vector": [0.0]*384, "text": "init", "id": "0"}], mode="overwrite")
     
-    # Create Vector Store
+    #create vector store
     vector_store = LanceDB.from_documents(documents, embeddings, connection=db, table_name="workflow_traces")
     print(f" Successfully indexed {len(documents)} trace frames into LanceDB!")
     return vector_store
@@ -64,5 +64,3 @@ def query_similar_workflows(query_text: str, k=3):
 
 if __name__ == "__main__":
     initialize_lancedb_index()
-
-#------

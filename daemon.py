@@ -207,7 +207,7 @@ zeroconf = Zeroconf()
 
 @app.on_event("startup")
 def startup_event():
-    local_ip = get_local_ip()
+    local_ip = "100.112.28.37"
     port = 8000
     print(f"Registering mDNS service at: {local_ip}:{port}")
 
@@ -230,6 +230,3 @@ def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-        
-

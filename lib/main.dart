@@ -39,7 +39,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   double _volume = 50;
   double _brightness = 50;
 
-  //Connect
   @override
   void initState() {
     super.initState();
@@ -75,13 +74,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _channel!.stream.listen((message) {
         final data = jsonDecode(message);
         
-        // Handle voice transcriptions pushed from laptop daemon
+        //handle voice transcriptions pushed from laptop daemon
         if (data['type'] == 'transcription') {
           setState(() {
             _lastTranscribedVoice = '"${data['text']}"';
           });
         } 
-        // Sync sliders when daemon settings change via voice
+        //sync sliders when daemon settings change via voice
         else if (data['type'] == 'status') {
           setState(() {
             if (data['action'] == 'set_volume') {
@@ -96,9 +95,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       setState(() => _hostStatus = "Connection error: $e");
     }
   }
-  //Disconnect
 
-  //Comms
   void _sendCommand(String action, int value) {
     if (_channel != null && _isConnected) {
       _channel!.sink.add(jsonEncode({'action': action, 'value': value}));
@@ -124,7 +121,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 24),
             
-            // Voice Activity Card
+            //voice Activity Card
             Card(
               elevation: 4,
               color: Colors.blueGrey.shade900,
@@ -150,10 +147,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 32),
 
-            // Controls
+            //controls
             ElevatedButton(
               onPressed: () {
-                _connectToDaemon("192.168.254.248", 8000);
+                _connectToDaemon("100.112.28.37", 8000);
               }, 
               child: const Text("Connect via direct IP link")),
             Text("System Volume (${_volume.round()}%)", style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -187,4 +184,3 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 }
-//Comms

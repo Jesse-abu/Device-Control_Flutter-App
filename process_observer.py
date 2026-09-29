@@ -3,7 +3,6 @@ from datetime import datetime
 from PIL import Image
 from pynput import keyboard, mouse
 
-#------
 class ProcessObserver:
     def __init__(self, output_file="workflow_traces.jsonl"):
         self.output_file = output_file
@@ -12,10 +11,9 @@ class ProcessObserver:
         self.active_window_title = ""
         self.active_app_name = ""
         
-        # Buffer to accumulate recent user actions before writing a snapshot
+        #buffer to accumulate recent user actions before writing a snapshot
         self.action_buffer = []
 
-    # --- ACTIVE WINDOW & PROCESS TRACKING ---
     def get_active_window_info(self):
         """Retrieves active window title and process name across platform OSs."""
         app_name = "Unknown"
@@ -26,7 +24,7 @@ class ProcessObserver:
             win = gw.getActiveWindow()
             if win:
                 window_title = win.title
-                # Find process associated with active window
+                #find process associated with active window
                 for proc in psutil.process_iter(['pid', 'name']):
                     if proc.info['name'] and proc.info['name'].lower() in window_title.lower():
                         app_name = proc.info['name']
@@ -36,30 +34,28 @@ class ProcessObserver:
 
         return app_name, window_title
 
-    # --- OCR SCREEN CAPTURE ---
     def capture_screen_text(self):
         """Captures active screen area and extracts visible text via OCR."""
         try:
             with mss.mss() as sct:
-                # Capture primary monitor
+                #capture primary monitor
                 monitor = sct.monitors[1]
                 sct_img = sct.grab(monitor)
                 
-                # Convert raw pixels to PIL Image
+                #convert raw pixels to PIL Image
                 img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
                 
-                # Downscale image to speed up OCR inference
+                #downscale image to speed up OCR inference
                 img.thumbnail((1280, 720))
                 
-                # Run OCR extraction
+                #run OCR extraction
                 extracted_text = pytesseract.image_to_string(img)
-                # Clean up whitespace
+                #clean up whitespace
                 clean_text = " ".join(extracted_text.split())
                 return clean_text[:500]  # Store top 500 characters of contextual text
         except Exception as e:
             return f"[OCR Error: {e}]"
 
-    # --- PYNPUT ACTION EVENT HOOKS ---
     def _on_click(self, x, y, button, pressed):
         if pressed and self.is_running:
             self.action_buffer.append({
@@ -82,11 +78,10 @@ class ProcessObserver:
                 "timestamp": datetime.now().isoformat()
             })
 
-    # --- LOGGING & EVENT EMISSION ---
     def log_event_snapshot(self):
         """Bundles window state, input actions, and OCR context into a structured trace frame."""
         if not self.action_buffer:
-            return # Skip snapshot if user was idle
+            return #skip snapshot if user was idle
 
         app_name, window_title = self.get_active_window_info()
         ocr_context = self.capture_screen_text()
@@ -100,20 +95,19 @@ class ProcessObserver:
             "screen_ocr_summary": ocr_context
         }
 
-        # Clear buffer for next sampling interval
+        #clear buffer for next sampling interval
         self.action_buffer.clear()
 
-        # Write event snapshot to JSONL (JSON Lines) storage
+        #write event snapshot to JSONL storage
         with open(self.output_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(snapshot) + "\n")
 
         print(f" Recorded Trace Frame: App='{app_name}' | Title='{window_title}' | Actions={snapshot['actions_count']}")
 
-    # --- OBSERVER LOOP ---
     def start(self, poll_interval=5.0):
         self.is_running = True
         
-        # Start keyboard & mouse listeners in background threads
+        #start keyboard & mouse listeners in background threads
         self.mouse_listener = mouse.Listener(on_click=self._on_click)
         self.key_listener = keyboard.Listener(on_press=self._on_press)
         self.mouse_listener.start()
@@ -139,5 +133,3 @@ class ProcessObserver:
 if __name__ == "__main__":
     observer = ProcessObserver()
     observer.start(poll_interval=5.0)
-
-#------

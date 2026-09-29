@@ -4,14 +4,12 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from vector_store import query_similar_workflows
 
-# --- STATE SCHEMA ---
 class AgentState(TypedDict):
     user_intent: str
     retrieved_context: str
     action_plan: List[dict]
     execution_logs: List[str]
 
-# --- TOOL EXECUTORS ---
 def execute_os_action(action: dict) -> str:
     """Executes atomic system actions based on the agent's plan."""
     action_type = action.get("type")
@@ -45,8 +43,6 @@ def execute_os_action(action: dict) -> str:
             
     except Exception as e:
         return f"Error executing action {action}: {e}"
-
-# --- LANGGRAPH NODE FUNCTIONS ---
 
 def retrieve_context_node(state: AgentState) -> AgentState:
     """Node 1: Retrieves similar past workflow traces from LanceDB."""
@@ -83,8 +79,6 @@ def synthesize_plan_node(state: AgentState) -> AgentState:
     ]
     """
     
-    # Mock LLM response parsing (or swap with Ollama / OpenAI call)
-    # Here we parse structured output for execution
     if "spotify" in state['user_intent'].lower() or "music" in state['user_intent'].lower():
         plan = [
             {"type": "open_app", "target": "spotify"},
@@ -116,24 +110,19 @@ def execute_plan_node(state: AgentState) -> AgentState:
         "execution_logs": logs
     }
 
-# --- BUILD LANGGRAPH WORKFLOW ---
 workflow = StateGraph(AgentState)
 
-# Add Nodes
 workflow.add_node("retrieve_context", retrieve_context_node)
 workflow.add_node("synthesize_plan", synthesize_plan_node)
 workflow.add_node("execute_plan", execute_plan_node)
 
-# Add Graph Edges
 workflow.set_entry_point("retrieve_context")
 workflow.add_edge("retrieve_context", "synthesize_plan")
 workflow.add_edge("synthesize_plan", "execute_plan")
 workflow.add_edge("execute_plan", END)
 
-# Compile LangGraph State Machine
 app_agent = workflow.compile()
 
-# --- ENTRY POINT ---
 def run_autonomous_agent(user_command: str):
     initial_state = {
         "user_intent": user_command,
